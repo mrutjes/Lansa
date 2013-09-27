@@ -1,0 +1,269 @@
+
+
+
+
+
+
+
+
+
+Functional design
+FD Update payment method & Capacity Calcluation
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+AuthorRobert GroenewegenTitlePortal Backend Update payment & Capacity CalculationStatusFinalVersion7.0DateApril 15, 2013RegistrationG:\System Development\Functional Designs\Portal\Functioneel Ontwerp backend\FO PB Update Payment method & Capacity Calculation 7.0.doc
+1 Table of Contents
+1	TABLE OF CONTENTS	2
+2	VERSION MANAGEMENT	4
+3	INTRODUCTION	6
+4	DATA MODEL	7
+4.1	ENTITIES	7
+5	UPDATE PAYMENT METHOD & CAPACITY CALCULATION (PORB800/801)	9
+5.1	INTRODUCTION	9
+5.2	REQUEST MESSAGE	9
+5.3	DESCRIPTION	10
+5.4	FLOWCHART	10
+5.5	FUNCTIONALITY	10
+5.5.1	Capacity calculation	10
+5.5.2	Handle the dossier	15
+5.5.3	Update direct debit data in EntraCard	17
+5.5.4	Create direct debit mandate number	20
+5.5.5	Create SEPA log data	20
+5.6	CREATE RESPONSE XML MESSAGE	21
+6	INFORMATION COMPONENTS	22
+
+2 
+Version management
+
+VersionDateAuthorBrief description of adaptation1.0April 22, 2010Robert GroenewegenCR31004759 CCD - Interface tussen Portal en Back-end betaalwijze & limietverhoging1.1May 26, 2010Robert GroenewegenError: EmploymentCode not used2.0February 21, 2011Gert van der WorpCR31005903 - New CCD-check on ‘Housing costs’ (check type WNL). Therefore new fields ‘Housing costs evidence’ and ‘Housing costs evidence entry date’ introduced.3.0April 19, 2011Marcel SteenstraCR31006330 – call 20110413097
+Extra fields in GOIBST for processing the GBW dossier.
+PRSSTB and EntraCard must be updated when received data is deffirent from the current data in PRSSTB and EntraCard 3.1May 5, 2011Marcel SteenstraCR31006330 – call 20110413097
+The processing of direct debit (add, change delete) is done with Entra api’s directly and not in the started dossier3.2May 9, 2011Marcel SteenstraCR31006458 – call 20110415042
+Temporary solution because the portal sends a wrong XML: When fixed amount is zero and percentage is zero, get current fixed amount from Entra4.0December 16, 2011Marcel SteenstraMUST CR31007566 – The housing costs is a gross amount and has to be converted to a net amount4.1December 20, 2011Marcel SteenstraMUST CR31007566 – Only convert the housing costs when customer has an owner-occupied house5.0January 27, 2012Marcel SteenstraMUST CR31007778 - Net income partner has to be used in the calculation of the housing costs also.5.1February 17, 2012Marcel SteenstraMUST CR31007778 - Field net income partner can only be used when marital state is equal to Married or Living together6.0March 22, 2012John VisscherRFC 31008180 - Extra velden woonlasten
+RFC 31008181 - Extra Types dienstverband6.1May 2, 2012John VisscherXSD changed7.0April 15, 2013Gert van der WorpSEPA CR31009868 (WEB13.2)
+Implementation of IBAN and BIC (addition to CR31005947), creating SEPA mandates and added logging.
+
+New layout for document (letter type etc).8.0June 05, 2013Allie van den BergCR31010171 Online ACB + Total Exp.bij Update Payment Method on the Portal
+3 
+Introduction
+The document describes the functionality of back-end function “Update Payment method & Capacity Calculation”. This function is called by the back-end control program (see functional description FO PB General).
+
+The function receives the answers to the Capacity Questions on the Web and saves that data. It creates a dossier to start the application process for the Credit Agreement. The requested change by the account requires the approval of the Credit Agreement. When necessary the direct debit data is changed in Entracard directly.
+
+4 
+ Data model
+4.1 Entities
+EntityCAPACITEIT (CAPACITY)DefinitionCapacity data AttributesNameType LengthValue rangeExplanationSee FDO-Invoeren_wijzigen DK gegevensData volumes
+
+EntitySEPA BACKEND LOGGING (SBLBST)DefinitionFile containing log information for E-payment and Updatepaymentmethod backend requests (for both portal and IMT/CMT)AttributesNameType LengthValue rangeAccount numberP19,0IBANA34HerkomstA12Machtigingsnummer A16BedragP13,2DatumP8,0TijdP6,0Customer numberP11,0VoornaamA20TussenvoegselsA10AchternaamA30StraatA32Huisnummer numeriekP7,0Huisnummer alfanumeriekA9PostcodeA7WoonplaatsA25TransactionIdA100Explanation/
+RemarksData volumes
+
+
+5 
+Update payment method & Capacity Calculation (PORB800/801)
+
+5.1 Introduction
+The function handles the capacity questions and creates the dossier for the approval of the Credit Agreement and the change to new Payment Method.
+
+5.2 Request message
+The portal sends the XML message “UpdatePaymentMethodCapacityCalculation_Request” to the Portal back-end control program.
+
+
+
+5.3 Description
+The XML document has the requested payment method, and the answers to the Capacity Questions. Notice that the document has only the answers. The back-end function does the calculation with these answers, and saves the answers and the result as the Capacity Calculation.
+The requested change of the payment method requires a Credit Agreement. The account does not have a Credit Agreement yet. The Portal did gather the required capacity information and included that information in the request. Only after an approval of the Credit Agreement request, the system can change the payment method.
+
+This function does save the Capacity Questions. Notice that the account does not have a Credit Agreement yet. In other words, the value of the Credit Agreement Indicator is blanks. The function does return “OK” to the Portal if the steps are successful. Notice that this does not imply that the Credit Agreement has been approved.
+
+
+5.4 Flowchart
+
+
+
+5.5 Functionality
+
+5.5.1 Capacity calculation
+The Capacity Calculation is performed using module AMOD134 – Portal Backend Capacity Calculation. Module AMOD134 is called with the following parameters: 
+NbrParameter nameOrigin1AccountNumberAccountNumber from XML message2CapacityQuestionsOriginCapacityQuestionsOrigin from XML message3MaritalCodeMaritalCode from XML message4EmploymentCodeEmploymentCode from XML message5NettIncomeNettIncome from XML message6AnnualBonusIf used AnnualBonus from XML message, otherwise spaces7NettIncomePartnerIf used NettIncomePartner from XML message, otherwise zero8OtherIncomeIf used OtherIncome from XML message, otherwise zero9Children Financially ResponsibleChildrenFinanciallyResponsible from XML message10AlimonyIf used Alimony from XML message, otherwise zero11GrossHousingCostsGrossHousingCosts from XML message12HousingCodeHousingCode from XML message13OtherCostszero14PartnerIncomeIf used PartnerIncome from XML message, otherwise space15CompanyNameIf used CompanyName from XML message, otherwise space16WorkedLastPeriodIf used WorkedLastPeriod from XML message, otherwise space17RentSupplementIf used RentSupplement from XML message, otherwise zero18EvidenceSpaces 
+If the Capacity Calculation returns an error (return code = 1), then end the process while linking back
+Error code		Returned Error code.
+Message File 		Returned Message file
+
+If the Capacity Calculaton returns return code equal to zero, then the customer number, co-applicant customer number and account limit are determined by calling API ‘Get Account Information’. Next, the function retrieves the latest BKR check result from [TOETSINGEN BESTAND](TTSBST) with the customer number. If Datum toetsing is less/equal than the system date minus the maximum age credit check, then the credit check result is set to blanks. Next, [CAPACITEIT.maximaal limiet] of the latest capacity calculation of the customer number is fetched from [CAPACITEIT](CAPBST). 
+
+If the credit check result is equal to ‘BK+’ and the account limit + the account limit raise is less or equal to the [CAPACITEIT.maximaal limiet] and the co-applicant customer is greater than zero, then the result is set to ‘ACBP’.  If the co-applicant customer number equals zero, then the result is set to ‘ACB+’.
+
+If the above conditions are not true, then the function calls module KMOD244 ‘Calculate maximum limit’ to determine to maximum limit including the partner.
+
+Now, if the credit check result is equal to ‘BK+’ and the account limit + the account limit raise is less or equal to the [CAPACITEIT.maximaal limiet total]. If so, then the result is set to ‘ACBP’. If not, then the result is set to ‘ACB-‘.
+
+In all other cases (‘BK-‘, ‘BK?’, ‘BKO’ or no credit check result at all) the result is set to ‘ACB?’.When the ACB result is known, the total exposure is determined by calling function ‘Determine Super Customer features’ (KMOD280) with the customer number. Now, all the necessary fetched and determined data is updated in [PRE CHECK ACB DATA](PCABST).
+
+Origin data in [PRE CHECK ACB DATA](PCABST):
+FieldOriginACB resultDetermined ACB result Total exposureReturned ‘Total exposure all accounts’ from KMOD280. The determined total exposure can be corrected. In case of an overlimit (current balance is greater than the current credit limit) and the desired limit (current credit limit plus requested limit raise) is less or equal than the current balance the total exposure is not corrected.
+In case of an overlimit and the desired limit (current credit limit plus requested limit raise) is greater than the current balance the total exposure is set to total exposure plus desired credit limit (current credit limit plus requested limit raise) minus current balance of the account.
+Otherwise (no overlimit) the total exposure is set to total exposure plus desired credit (current credit limit plus requested limit raise)  limit minus current credit limit of the account.Employment codeReceived Employment Code form the XML. If the value equals blanks, then ‘000’.Housing codeReceived Housing Code form the XML. If the value equals blanks, then ‘000’.
+When all the necessary data is available, the ACBResult Return Code is determined.
+5.6 Determining ACB Result Return Code
+The data of the current entry in [PRE CHECK ACB DATA](PCABST) is used to determine the ACB Result Return Code in. This is done by fetching:
+
+- (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 1)
+- (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 2)
+- (PROGRAMMA PARAMETER TABEL.program parameter amount)              
+
+from (PROGRAMMA PARAMETER TABEL)[PARTAB].
+
+If the ACB result equals ‘ACB+’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals  ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 6.
+
+If the ACB result equals ‘ACB-’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 7.
+
+If the ACB result equals ‘ACBP’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 8.
+
+If the ACB result equals ‘ACB?’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 9
+
+In case the requested entry is not found, end the process while linking back the following variables:
+       Error code		POR0001.
+Error Message		Geen entry gevonden in PARTAB.
+
+Next, the value of (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 1) is used when the ‘Total exposure’ is less than (PROGRAMMA PARAMETER TABEL.program parameter amount). Otherwise, the value of (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 2) is used. 
+
+The determined value is only concatonated with [PRE CHECK ACB DATA.employment code] and [PRE CHECK ACB DATA.housing code] and returned in the response message as ACBRESULT when the ACB result equals ‘ACB+’ and the total exposure is greater or equal to the value of PROGRAMMA PARAMETER TABEL.program parameter amount. Otherwise, only the determined value is returned.
+
+
+5.6.1 Handle the dossier
+Create the dossier
+The data entry code used to start a dossier is fetched from PARTAB (*FUNCTION, 1). With the data entry code, the ‘dossier type’ and ‘status to’ are fetched from “Data entry overgang” (DTAOV). To create a dossier Lansa function “Toevoegen dossier (batch)” (DSRW109) is called with input parameters:
+Input parameterOriginDossier typeDossier type from DTAOVAccountnumberFrom XMLCustomernumberEmptyHerkomst“POR”User“ENTRACARD”
+The Lansa function returns the dossier number of the created dossier. When the dossier is created it needs to be unlocked. To unlock the dossier, Lansa function “(Un)lock dossier of brief” (DSRM170) is called with input parameters:
+Input parameterOriginDossier numberDossier number from DSRW109Lock codeU
+Determine new fixed amount
+The XML request has an optional tag “Fixed Amount”. If the request has no value for Fixed Amount, then the value is automatically zero.
+Because the portal sends an invalid XML message, temporally an exception is made: When the fixed amount in the XML message is equal to zero and the Payment condition in the XML message is equal to zero, the new fixed amount will be set to the current fixed amount in Entracard (determined with Entra api “Get customer account information).
+
+Determine account agreement
+Determine “Account Agreement Group” by reading the Product/account agreement table (PAATAB) with search key “Product id” and “Account agreement id” (from ENTRA API “Get customer account information”).
+
+Determine all “Account agreements” which apply for the product, by reading the Product/account agreement table (PAATAB2) with search key “Product id” and “Account Agreement Group”.
+
+Determine the characteristics of the new account agreement in Account Agreement table (AAGTAB):
+If the Fixed amount is zero, then use the value “N” as “Vast bedrag” (Fixed amount)
+If the Fixed amount is greater than zero, then use the value “J” as “Vast bedrag” (Fixed amount).
+“Aflossings percentage (Repayment percentage)” = Payment condition
+
+If the followed procedure did not determine an Account agreement id, then end the process while linking back
+Error code		Message Id.
+Error Message		Geen Account agreement bekend (No Account agreement known)
+
+Create generic output interface
+In “Generieke output interface” (GOIBST) records for the created dossier are inserted.
+For Account Agreement:
+Label (GOILBL)Value (GOIVAL)BMDAAGThe determined account agreementFor Fixed instalment amount:
+Label (GOILBL)Value (GOIVAL)BMDVBDThe determined fixed amount
+Create a transition
+In the dossier a transition has to be made. This is done by reading “Data entry overgang” (DTAOV) with data entry code from PARTAB, the ‘dossier type’ and ‘status from’ is not equal to zero. For every row found in “Data entry overgang” (DTAOV), a record is inserted in “Dossier/Transitie-Opdracht” (DTOBST) with the following fields:
+
+FieldOriginData entry codeDate entry code from PARTABDossier typeDossier type from DTAOVStatus fromStatus from from DTAOVStatus toStatus to from DTAOVDossier numberDossier number from DSRW109
+
+5.6.2 Update direct debit data in EntraCard
+Determine current payment method
+The current payment method is determined by calling Entra api “Get customer account information” (APIEAI).
+
+Determine new payment method
+The customer can request an automatic or manual payment. The function transforms both values to valid values for Entra. For the manual payment method, the type of bank account has impact on the value.
+Payment method in XMLPayment  methodA3HIf institution = NLD and Bank Account Number from the customer < 10000000: 1
+Else: 2
+Determine current fixed instalment amount
+The current fixed instalment amount is determined by calling Entra api “Get customer account information” (APIEAI).
+
+Determine direct debit bank account number, IBAN and BIC
+When the determined new payment method is equal to 3 (direct debit) the (direct debit) bank account number, IBAN and BIC are determined. When the determined new payment method is not equal to 3 this step is skipped.
+
+When the current payment method is equal to 3 or the institution is equal to BEL (Belgium) the direct debit account number, IBAN and BIC are determined by calling ENTRA api “Get Customer Direct Debit Information” (APIEDI) with the account number from the XML message. When no direct debit account number is returned by the api, the process ends while linking back:
+Error code	POR0093
+Error Message	Geen direct debit account nummer bekend (No direct debit account number known)
+
+When the current payment method is not equal to 3 and the institution is not equal to BEL (Belgium), first the customer number is determined by calling ENTRA api “Get customer account information” (APIEAI) with the account number from the XML message. After this, with the customer number, Entra api “Get customer information” (APIECI) is called to determine the bank account number, IBAN, BIC (and customer name/address data for later logging use.).
+
+Update EntraCard
+The current and new value of the payment method are compared.
+Four situations can occur:
+
+1. The current payment method is equal to 1 or 2 and the new payment method is equal to 3
+- Api Add direct debit agreement (APUEDA) is called:
+ Input field APUEADOriginAccount numberAccountNumber from XML messageDirect debit bankaccount numberThe determined (direct debit) bank account numberIBANThe determined IBANBICThe determined BICBank account nameIf Institution = NLD and BIC is filled, fetch the “Banknaam” from NEDERLANDSE BANK IDENTIFIER-TABEL (NBITAB)Type of accountIf direct debit bank account number greater or equal to 100000000 or if institution unequal to “NLD”: 1 (=bank account), otherwise 2 (=giro account).Start date for the direct debit agreementSystemdateDirect debit type1Fixed amount0
+When the ENTRA api returns an error, end the process while linking back:
+Error code	Message Id from ENTRA api
+Error Message	Message description belonging to the error message id returned by the Api
+
+2. The current payment method is equal to 3 and the new payment method is equal to 3
+- Api Change Direct Debit Agreement (APUEDC) is called:
+Input field APUEDCOriginAccount numberAccountNumber from XML messageDirect debit bankaccount numberThe determined (direct debit) bank account numberIBANThe determined IBANBICThe determined BICBank account nameIf Institution = NLD and BIC is filled, fetch the “Banknaam” from NEDERLANDSE BANK IDENTIFIER-TABEL (NBITAB)Type of accountIf direct debit bank account number greater or equal to 100000000 or if institution unequal to “NLD”: 1 (=bank account), otherwise 2 (=giro account).Direct debit type1Fixed amount0
+When the ENTRA api returns an error, end the process while linking back:
+Error code	Message Id from ENTRA api
+Error Message	Message description belonging to the error message id returned by the Api
+
+3. The current payment method is equal to 3 and the new payment method is equal to 1 or 2
+- Api Delete Direct Debit Agreement (APUEDD) is called:
+ Input field APUEDDOriginAccount numberAccountNumber from XML messageNew payment method1 if bank account number of the customer  > 9999999
+2 if bank account number of the customer <= 9999999
+When one of the ENTRA api returns an error, end the process while linking back:
+Error code	Message Id from ENTRA api
+Error Message	Message description belonging to the error message id returned by the Api
+
+4. The current payment method and the new payment method are equal to 1 or 2
+No action is needed.
+
+5.6.3 Create direct debit mandate number
+Only in case a direct debit has been created or changed, check if a record exists in INCASSO MACHTIGINGEN BESTAND (INMBST), search with the account number and the determined IBAN number. If no record exists, a direct debit mandate number is created by calling module “Aanmaken incasso machtiging” (BETA190), see Information components.
+
+If the call to this module fails, then end the process while linking back,
+Error codeMessage Id (POR0115)Error MessageFout bij aanmaken machtigingsgegevens (Error creating direct debit mandate data)
+5.6.4 Create SEPA log data
+Only in case a direct debit has been created or changed, specific SEPA log data is stored in the SEPA BACKEND LOG FILE (SBLBST) according to the table below:
+Account numberAccountNumber from XML messageIBANthe determined IBAN numberHerkomstemptyMachtigingsnummer The determined (or by BETA190 created) numberBedragFixedAmount from XML messageDatumCurrent system dateTijdCurrent system timeCustomer numberCustomerNumber from APIEAIVoornaamFirst name from APIECITussenvoegselsInitials from APIECIAchternaamLast name from APIECIStraatAddress line 1 from APIECIHuisnummer numeriekHouse number from APIECIHuisnummer alfanumeriekHouse number extension from APIECIPostcodePostal code from APIECIWoonplaatsCity from APIECITransactionIdTransactionId from XML message
+
+5.7 Create response XML message
+If no error occurs, then the following variables are linked back to the Back-end control program:
+Error code“ “Error Message“ ”
+If any error occurs, then the following variables are linked back to the Back-end control program:
+Error code<error message ID>Error Message<error text >
+
+
+6 Information components
+
+BETA190 (Aanmaken incasso machtiging)
+
+DocumentFO Aanmaken incasso’sInput
+NbrParameter nameType-LengthRemarks1Accountnummer (EX_ACCNUM)P-19,0Accountnumber from XML2IBAN (EX_KBWIBA)A-34Determined IBAN number3Check_only (EX_CHKIND)A-1“N”Output
+NbrParameter nameType-LengthRemarks1Returncode (EX_RETCD)P-3,02Machtigingsnummer (EX_INMMNR)A-16
+
+
+
+
+
+
+
+
+
+FD Update payment method & Capacity Calculation
+
+
+
+International Card Services		page 22
+

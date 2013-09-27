@@ -1,0 +1,202 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+Functional design
+Portal Backend Upgrade Card
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Author		: Marcel Steenstra
+Title		: FO Portal Backend Update card
+Status		: Concept
+Version		: 3.0
+Date		: March 11, 2013
+Reg.code	: G:\System Development\Functional Designs\Portal\Functioneel Ontwerp backend\FO PB Upgrade Card 3.0.doc
+
+Version management
+
+
+VersionDateAuthorBrief description of adaptation0.121 March 2012Marcel SteenstraWEB12.1 CR31007420 Initial version1.0May 10, 2012John VisscherRFC31008180 - Extra velden woonlasten
+RFC31008181 - Extra Types dienstverband
+RFC31008473 – Nazorg SPRINT 2. Aanroep AMOD134.2.0July 12, 2012Gert van der WorpWEB12.2 – CR31008476 – For extra cards, fields “Nationality” and “SocialSecurityNumber” not mandatory any more3.0March 11, 2013Marcel SteenstraMUST CR31009231 – New field GBF in xml message4.0August  28, 2013Allie van den BergWEB13.4 – CR31010493. Online ACB + Total Exp.bij Upgrade Card on the Portal
+
+Contents
+
+1	INTRODUCTION	4
+2	DATA MODEL	5
+2.1	ENTITIES	5
+3	BACKEND MODULE UPGRADE CARD	6
+3.1	PROCESS UPGRADE CARD REQUEST	6
+3.2	CAPACITY CALCULATION	7
+3.3	CREATE PRODUCT MIGRATION REQUEST	7
+3.4	RESPONSE UPGRADE CARD	10
+
+1 
+Introduction
+
+This design describes the functionality of backend function upgrade card. The function executes a capacity calculation and sets up a product migration request which will be executed by the product migration program.
+This function is called by the backend control program, see functional description FO PB General.
+
+2 
+Data model
+2.1 Entities
+
+
+EntityPRODUCTOMZETTING ADDITIONAL SERVICES (PRODUCT CONVERSION ADDITIONAL SERVICES) - PASBSTDefinitionPersonal data AttributesNameType LengthValue rangeExplanationSee FO Product omzettingenData volumes
+
+EntityPRODUCTOMZETTING EXTRA CARDS (PRODUCT CONVERSION EXTRA CARDS) - PECBSTDefinitionPersonal data AttributesNameType LengthValue rangeExplanationSee FO Product omzettingenData volumes
+3 
+Backend module Upgrade Card
+3.1 Process upgrade card request
+
+The portal send an XML message “UpgradeCardRequest” to the Portal backend control program. 
+Fields in the “UpgradeCardRequest” xml:
+
+3.2 
+Capacity Calculation
+
+The Capacity Calculation is performed using module AMOD134 – Portal Backend Capacity Calculation. Module AMOD134 is called with the Following parameters:
+ 
+NbrParameter nameOrigin1AccountNumberAccountNumber from XML message2CapacityQuestionsOriginCapacityQuestionsOrigin from XML message3MaritalCodeMaritalCode from XML message4EmploymentCodeEmploymentCode from XML message5NettIncomeNettIncome from XML message6AnnualBonusIf used AnnualBonus from XML message, otherwise spaces7NettIncomePartnerIf used NettIncomePartner from XML message, otherwise zero8OtherIncomeIf used OtherIncome from XML message, otherwise zero9ChildrenFinanciallyResponsibleChildrenFinanciallyResponsible from XML message10AlimonyIf used Alimony from XML message, otherwise zero11GrossHousingCostsGrossHousingCosts from XML message12HousingCodeHousingCode from XML message13OtherCostszero14PartnerIncomeIf used PartnerIncome from XML message, otherwise space15CompanyNameIf used CompanyName from XML message, otherwise space16WorkedLastPeriodIf used WorkedLastPeriod from XML message, otherwise space17RentSupplementIf used RentSupplement from XML message, otherwise zero18EvidenceSpaces 
+If the Capacity Calculaton returns an error (return code = 1), then end the process while linking back
+Error code	Returned Error code.
+       Message File 	Returned Message file 
+
+If the Capacity Calculation returns return code equal to zero, then the customer number, co-applicant customer number and account limit are determined by calling API ‘Get Account Information’. Next, the function retrieves the latest BKR check result from [TOETSINGEN BESTAND](TTSBST) with the customer number. If Datum toetsing is less/equal than the system date minus the maximum age credit check, then the credit check result is set to blanks. Next, [CAPACITEIT.maximaal limiet] of the latest capacity calculation of the customer number is fetched from [CAPACITEIT](CAPBST). 
+
+When the account limit raise equals zero, then regardless of the check result the result is always set to ‘ACB+’ . 
+
+If the credit check result is equal to ‘BK+’ and the account limit + the account limit raise is less or equal to the [CAPACITEIT.maximaal limiet] and the co-applicant customer is greater than zero, then the result is set to ‘ACBP’.  If the co-applicant customer number equals zero, then the result is set to ‘ACB+’.
+
+If the above conditions are not true, then the function calls module KMOD244 ‘Calculate maximum limit’ to determine to maximum limit including the partner.
+
+Now, if the credit check result is equal to ‘BK+’ and the account limit + the account limit raise is less or equal to the [CAPACITEIT.maximaal limiet total]. If so, then the result is set to ‘ACBP’. If not, then the result is set to ‘ACB-‘.
+
+In all other cases (‘BK-‘, ‘BK?’, ‘BKO’ or no credit check result at all) the result is set to ‘ACB?’.When the ACB result is known, the total exposure is determined by calling function ‘Determine Super Customer features’ (KMOD280) with the customer number. Now, all the necessary fetched and determined data is updated in [PRE CHECK ACB DATA](PCABST).
+
+Origin data in [PRE CHECK ACB DATA](PCABST):
+FieldOriginACB resultDetermined ACB result Total exposureReturned ‘Total exposure all accounts’ from KMOD280. The determined total exposure can be corrected. In case of an overlimit (current balance is greater than the current credit limit) and the desired limit (current credit limit plus requested limit raise) is less or equal than the current balance the total exposure is not corrected.
+In case of an overlimit and the desired limit (current credit limit plus requested limit raise) is greater than the current balance the total exposure is set to total exposure plus desired credit limit (current credit limit plus requested limit raise) minus current balance of the account.
+Otherwise (no overlimit) the total exposure is set to total exposure plus desired credit (current credit limit plus requested limit raise)  limit minus current credit limit of the account.Employment codeReceived Employment Code form the XML. If the value equals blanks, then ‘000’.Housing codeReceived Housing Code form the XML. If the value equals blanks, then ‘000’.
+When all the necessary data is available, the ACBResult Return Code is determined.
+3.3 Determining ACB Result Return Code
+The data of the current entry in [PRE CHECK ACB DATA](PCABST) is used to determine the ACB Result Return Code in. This is done by fetching:
+
+- (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 1)
+- (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 2)
+- (PROGRAMMA PARAMETER TABEL.program parameter amount)              
+
+from (PROGRAMMA PARAMETER TABEL)[PARTAB].
+
+If the ACB result equals ‘ACB+’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals  ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 6.
+
+If the ACB result equals ‘ACB-’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 7.
+
+If the ACB result equals ‘ACBP’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 8.
+
+If the ACB result equals ‘ACB?’, then the entry is selected where (PROGRAMMA PARAMETER TABEL.program parameter program name) equals ’PORB581’ and (PROGRAMMA PARAMETER TABEL.program parameter sequens nr) equals 9
+
+In case the requested entry is not found, end the process while linking back the following variables:
+       Error code		POR0001.
+Error Message		Geen entry gevonden in PARTAB.
+
+Next, the value of (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 1) is used when the ‘Total exposure’ is less than (PROGRAMMA PARAMETER TABEL.program parameter amount). Otherwise, the value of (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 2) is used. When the account limit raise equals 0, then the value of (PROGRAMMA PARAMETER TABEL.program parameter alphanumeric value 1) is used.
+
+The determined value is only concatenated with [PRE CHECK ACB DATA.employment code] and [PRE CHECK ACB DATA.housing code] and returned in the response message as ACBRESULT when the ACB result equals ‘ACB+’ and the total exposure is greater or equal to the value of PROGRAMMA PARAMETER TABEL.program parameter amount. Otherwise, only the determined value is returned.
+3.4 Create product migration request
+A product migration request is created by inserting the received data in the product migration table(s). The product migration request is processed by the product migration programs (see FO Product omzettingen).
+
+When on or more additional services are present in the XML message, for each additional service a record is saved in file PRODUCTOMZETTING ADDITIONAL SERVICES (PASBST). The additional services saved in this file will be set up in Entra when the product migration is approved and a new account is set up in Entra.
+
+Origin of data for file PRODUCTOMZETTING ADDITIONAL SERVICES:
+FieldOriginAccount number (ACCNUM)From XML messageDatum aanvraag omzetting (POZDAO)SystemdateAdditional Service id (POVVRZ)When SeqNrCardAddSrv from XML message is equal to 0: AdditionalServiceGroup from XML message + “HC”
+
+Otherwise: AdditionalServiceGroup from XML message + “EC”
+In case the insert on file PRODUCTOMZETTING ADDITIONAL SERVICES fails, the process is ended while linking back:
+       Error code	POR0002	
+       Error Message	Fout bij schrijven gegevens naar bestand
+
+
+When an application for an extra card is present in the XML message (field SurName in the XML message is filled), The extra card data is saved in file PRODUCTOMZETTING EXTRA CARDS  (PECBST). The extra card application will be set up in AVS by the product migration programs (see FO Product omzettingen).
+
+Origin of data for file PRODUCTOMZETTING EXTRA CARDS:
+FieldOriginAccount number (ACCNUM)AccountNumber from XML messageDatum aanvraag omzetting (POZDAO)SystemdateNaam klantSurName from XML messageVoorlettersInitials from XML messageVoorvoegselsPrefix from XML messageMeisjesnaamMaidenName from XML messageMeisjesnaam voorvoegselsMaidenNamePrefix from XML messageGeslachtGender from XML message
+If 1: “M”
+If 2: “V”
+Else: “O”Datum geboorteBirthdate from XML messageNationaliteitIf Nationality from XML message is equal to blanks or “001”: Nationality from XML message
+
+If Nationality from XML message is equal to the country code Entra from INSTITUTION TABEL (ISTTAB): blanks
+
+Otherwise: “001”Nationaliteit landIf Nationality from XML message is equal to blanks, “001” or the country code Entra from INSTITUTION TABEL (ISTTAB): blanks
+
+Otherwise: Nationality from XML messageVerblijfsvergunningIf ResidencePermitType from XML message is equal to T (temporary): “B” (bepaald)
+
+If ResidencePermitType from XML message is equal to D (definitive): “O” (onbepaald)
+
+Otherwise: emptyVerblijfsvergunning geldig totResidencePermitEndDate from XML messageBurgerlijke staatMaritalCode from XML messageSofi/BSNSocialSecurityNumber from XML messageEmail adresEmailAddress from XML messageNaam op cardEmbossingName from XML messageImage idImageId from XML messageEmployee / pas nummerEmployeePassNumber from XML message
+In case the insert on file PRODUCTOMZETTING EXTRA CARDS fails, the process is ended while linking back:
+       Error code	POR0002	
+       Error Message	Fout bij schrijven gegevens naar bestand
+
+
+Always a record is inserted in PRODUCTOMZETTING (POZBST).
+
+Origin of data for file PRODUCTOMZETTING:
+FieldOriginAccount number (ACCNUM)AccountNumber from XML messageDatum aanvraag omzetting (POZDAO)SystemdateProduct van aanbieder id (PVAIDN)Current product from APIEAINieuw product id (POSPRD)ProductId from XML messageStatus migratie (POZSTM)“ANV”Nieuw accountnummer (POZACC)EmptyExternal id EntraCard (EXTIDN)EmptyKlantnummer (RELIDN)EmptyKlant id produktaanbieder (APAIDN)EmptyVolgnummer afnemer bij productaanbieder (APAVLG)EmptyInitiator productomzetting (POSIPO)“KLANT”Bron id (POZAPO)AffiliateCode from XML messageCard type (POZCTP)CardType from XML messageGewenst limiet (POZGWL)Current limit from APIEAI + CreditLimitRaiseAmount from XML messageKOV indicator (POZKOV)GBF from XML message
+In case the insert on file PRODUCTOMZETTING fails, the process is ended while linking back:
+       Error code	POR0002	
+       Error Message	Fout bij schrijven gegevens naar bestand
+
+
+
+
+
+3.5 
+Response Upgrade card
+
+
+
+
+
+
+
+
+
+
+
+
+Functional Design Portal Backend Upgrade Card
+
+
+
+International Card Services		page 12
+
